@@ -1,6 +1,9 @@
 const { InlineKeyboard } = require('grammy');
 const config = require('../config');
 
+// ─────────────────────────────────────────────
+// Show all packages in shop menu
+// ─────────────────────────────────────────────
 exports.showShopMenu = async (ctx) => {
   let text = '🛒 *TOKO PREMIUM*\n\n';
   text += '━━━━━━━━━━━━━━━━━━━━\n';
@@ -12,22 +15,23 @@ exports.showShopMenu = async (ctx) => {
   for (const [key, pkg] of Object.entries(config.packages)) {
     text += `*${pkg.name}*\n`;
     text += `${pkg.description}\n`;
-    text += `💰 Harga: *${pkg.price} Stars*\n\n`;
-
+    text += `💰 Harga: *${pkg.price} Stars ⭐*\n\n`;
     keyboard.text(`${pkg.name} (${pkg.price}⭐)`, `pkg_${key}`).row();
   }
 
   keyboard.text('← Kembali', 'back_main');
 
-  await ctx.editMessageText(text, {
-    parse_mode: 'Markdown',
-    reply_markup: keyboard
-  });
+  const opts = { parse_mode: 'Markdown', reply_markup: keyboard };
+  try { await ctx.editMessageText(text, opts); }
+  catch { await ctx.reply(text, opts); }
 };
 
+// ─────────────────────────────────────────────
+// Show checkout confirmation for selected package
+// ─────────────────────────────────────────────
 exports.handlePackageSelect = async (ctx, action) => {
   const packageId = action.replace('pkg_', '');
-  const pkg = config.packages[packageId];
+  const pkg       = config.packages[packageId];
 
   if (!pkg) {
     await ctx.answerCallbackQuery('❌ Paket tidak ditemukan');
@@ -35,9 +39,8 @@ exports.handlePackageSelect = async (ctx, action) => {
   }
 
   const keyboard = new InlineKeyboard()
-    .text('✅ Konfirmasi', `confirm_${packageId}`)
-    .row()
-    .text('❌ Batal', 'back_main');
+    .text('✅ Konfirmasi & Bayar', `confirm_${packageId}`).row()
+    .text('❌ Batal', 'menu_shop');
 
   await ctx.editMessageText(
     `📦 *CHECKOUT*\n\n` +
@@ -45,38 +48,39 @@ exports.handlePackageSelect = async (ctx, action) => {
     `Harga: *${pkg.price} Stars ⭐*\n` +
     `Video: *${pkg.videos} video*\n\n` +
     `✅ Akses seumur hidup\n` +
-    `✅ Garansi channel\n` +
+    `✅ Garansi channel 1x\n` +
     `✅ Support prioritas\n\n` +
-    `_Lanjutkan dengan "Konfirmasi"?_`,
+    `_Tekan "Konfirmasi & Bayar" untuk melanjutkan ke pembayaran Telegram Stars._`,
     { parse_mode: 'Markdown', reply_markup: keyboard }
   );
 };
 
+// ─────────────────────────────────────────────
+// Send Telegram Stars invoice
+// ─────────────────────────────────────────────
 exports.handleCheckout = async (ctx, action) => {
   const packageId = action.replace('confirm_', '');
-  const pkg = config.packages[packageId];
+  const pkg       = config.packages[packageId];
 
   if (!pkg) {
     await ctx.answerCallbackQuery('❌ Paket tidak ditemukan');
     return;
   }
 
+  // Unique payload: packageId + timestamp prevents duplicate processing
   const payload = `${packageId}_${Date.now()}`;
 
   try {
     await ctx.replyWithInvoice(
-      `Paket ${pkg.name}`,
-      `Dapatkan akses ke ${pkg.videos} video premium eksklusif`,
+      `${pkg.name}`,
+      `Dapatkan akses eksklusif ke ${pkg.videos} video premium. Akses seumur hidup dengan garansi channel.`,
       payload,
-      process.env.BOT_TOKEN,
-      'XTR', // Telegram Stars currency code
-      [{ label: pkg.name, amount: pkg.price }],
-      {
-        is_flexible: false
-      }
+      '', // provider_token must be empty string for Telegram Stars (XTR)
+      'XTR',
+      [{ label: pkg.name, amount: pkg.price }]
     );
   } catch (err) {
-    console.error('Invoice error:', err);
-    await ctx.answerCallbackQuery('❌ Gagal membuat invoice');
+    console.error('Invoice error:', err.message);
+    await ctx.answerCallbackQuery('❌ Gagal membuat invoice, coba lagi');
   }
 };
